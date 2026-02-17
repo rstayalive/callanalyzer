@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module>
+    <rawname>callanalyzer</rawname>
+    <name>Call Analyzer</name>
+    <namespace>Callanalyzer</namespace>
+    <version>10.0.3</version>
+    <type>tool</type>
+    <license>GPLv3+</license>
+    <category>Reports</category>
+    <description>Анализатор логов звонков Asterisk/FreePBX</description>
+    <publisher>telephonization.ru</publisher>
+    <menuitems>
+        <callanalyzer requires_auth="true">Call Analyzer</callanalyzer>
+    </menuitems>
+    <supported>
+        <version>17.0</version>
+    </supported>
+</module>
