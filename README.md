@@ -1,4 +1,6 @@
 FreePBX call analyzer.
+Requirements: FreePBX 16/17 with PJSIP
+
 Just enter the date and phone number to analyze all calls. 
 A full log file is attached to each call for manual analysis.
 
