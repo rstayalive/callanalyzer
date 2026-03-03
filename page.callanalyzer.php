@@ -1,25 +1,31 @@
 <?php
 namespace FreePBX\modules;
-// Включаем FreePBX фреймворк
-if (!defined('FREEPBX_IS_AUTH')) { die('No direct script access allowed'); }
 
-// Вспомогательные функции (включаем из functions.inc.php)
+if (!defined('FREEPBX_IS_AUTH')) { 
+    die('No direct script access allowed'); 
+}
+
 include_once('functions.inc.php');
 
-// Форма
 echo '<div class="container-fluid">';
 echo '<h1>Анализатор логов звонков</h1>';
+
 echo '<form method="post">';
-echo '<label for="date">Дата звонка (YYYY-MM-DD):</label>';
+echo '<label for="date">Дата звонка (YYYY-MM-DD):</label><br>';
 echo '<input type="date" id="date" name="date" required><br><br>';
-echo '<label for="number">Номер телефона:</label>';
+echo '<label for="number">Номер телефона:</label><br>';
 echo '<input type="text" id="number" name="number" required><br><br>';
-echo '<input type="submit" value="Анализировать">';
+echo '<input type="submit" value="Анализировать" class="btn btn-primary">';
 echo '</form>';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $date = $_POST['date'];
     $number = trim($_POST['number']);
+    
+    if (empty($date) || empty($number)) {
+        echo '<div class="alert alert-danger">Укажите дату и номер</div>';
+        exit;
+    }
 
     // Нормализация номера
     $normalizedNumber = preg_replace('/^\+?7|^\+?8/', '', $number);
@@ -28,84 +34,104 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $normalizedNumber = substr($normalizedNumber, -10);
     }
 
-    // Список лог-файлов
     $logDir = '/var/log/asterisk/';
-    $baseLog = $logDir . 'full';
-    $possibleLogs = [$baseLog];
-
-    $full0 = $baseLog . '.0';
-    $full1 = $baseLog . '.1';
-    if (file_exists($full0)) $possibleLogs[] = $full0;
-    if (file_exists($full1)) $possibleLogs[] = $full1;
-
+    $possibleLogs = [$logDir . 'full'];
+    
+    // Добавляем ротированные логи
+    foreach (['.0', '.1', '.2'] as $suffix) {
+        $f = $logDir . 'full' . $suffix;
+        if (file_exists($f)) $possibleLogs[] = $f;
+    }
+    
     $yyyymmdd = str_replace('-', '', $date);
     $rotatedLog = $logDir . 'full-' . $yyyymmdd;
-    if (file_exists($rotatedLog) && !in_array($rotatedLog, $possibleLogs)) {
+    if (file_exists($rotatedLog)) {
         $possibleLogs[] = $rotatedLog;
     }
 
-    // Сбор строк по дате
-    $datedLines = [];
+    $datePrefix = '[' . $date;
+    $callIds = [];
+    $callIdToTime = []; // для сортировки
+
+    // === Первый проход: находим все Call-ID для номера ===
+    echo '<div class="alert alert-info">Поиск звонков по номеру...</div>';
+    
     foreach ($possibleLogs as $file) {
-        if (file_exists($file)) {
-            $logContent = file_get_contents($file);
-            $lines = explode("\n", $logContent);
-            $datePrefix = '[' . $date;
-            foreach ($lines as $line) {
-                if (strpos($line, $datePrefix) === 0) {
-                    $datedLines[] = $line;
+        if (!file_exists($file)) continue;
+        
+        $handle = fopen($file, 'r');
+        if (!$handle) continue;
+
+        while (($line = fgets($handle)) !== false) {
+            if (strpos($line, $datePrefix) !== 0) continue;
+            if (strpos($line, $normalizedNumber) === false) continue;
+
+            // Ищем Call-ID
+            if (preg_match('/\[C-([0-9a-f]+)\]/', $line, $match)) {
+                $cid = 'C-' . $match[1];
+                if (!isset($callIds[$cid])) {
+                    $callIds[$cid] = true;
+                    
+                    // Извлекаем время для сортировки
+                    if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]/', $line, $t)) {
+                        $callIdToTime[$cid] = $t[1];
+                    }
                 }
             }
         }
+        fclose($handle);
     }
 
-    if (empty($datedLines)) {
-        echo 'Логи для указанной даты не найдены.';
-        return;
+    $callIds = array_keys($callIds);
+    
+    if (empty($callIds)) {
+        echo '<div class="alert alert-warning">Звонки с номером ' . htmlspecialchars($number) . ' за ' . $date . ' не найдены.</div>';
+        echo '</div>';
+        exit;
     }
 
-    // Поиск строк с номером
-    $matchingLines = [];
-    foreach ($datedLines as $line) {
-        if (strpos($line, $normalizedNumber) !== false) {
-            $matchingLines[] = $line;
-        }
+    // Сортируем по времени (новые сверху)
+    uasort($callIds, function($a, $b) use ($callIdToTime) {
+        return strcmp($callIdToTime[$b] ?? '', $callIdToTime[$a] ?? '');
+    });
+
+    // Ограничение количества звонков (защита от слишком большого результата)
+    $maxCalls = 30;
+    if (count($callIds) > $maxCalls) {
+        echo '<div class="alert alert-warning">Найдено ' . count($callIds) . ' звонков. Показываем последние ' . $maxCalls . '.</div>';
+        $callIds = array_slice($callIds, 0, $maxCalls);
     }
 
-    if (empty($matchingLines)) {
-        echo 'Звонки не найдены.';
-        return;
-    }
+    echo '<h2>Найдено звонков: ' . count($callIds) . '</h2>';
 
-    // Извлечение уникальных call ID
-    $callIds = [];
-    foreach ($matchingLines as $line) {
-        if (preg_match('/\[C-([0-9a-f]+)\]/', $line, $match)) {
-            $callIds[] = 'C-' . $match[1];
-        }
-    }
-    $callIds = array_unique($callIds);
-
-    echo '<h1>Анализ звонков</h1>';
-
+    // === Второй проход: анализируем каждый звонок ===
     foreach ($callIds as $callId) {
-        // Все строки для этого call ID
         $callLines = [];
-        foreach ($datedLines as $line) {
-            if (strpos($line, '[' . $callId . ']') !== false) {
-                $callLines[] = $line;
+        
+        foreach ($possibleLogs as $file) {
+            if (!file_exists($file)) continue;
+            
+            $handle = fopen($file, 'r');
+            if (!$handle) continue;
+
+            while (($line = fgets($handle)) !== false) {
+                if (strpos($line, '[' . $callId . ']') !== false) {
+                    $callLines[] = trim($line);
+                }
             }
+            fclose($handle);
         }
 
-        // Полный лог
-        $fullLog = implode("\n", $callLines);
+        if (empty($callLines)) continue;
 
-        // Анализ (функция из functions.inc.php)
+        $fullLog = implode("\n", $callLines);
         $analysis = analyzeCall($callLines, $number, $callId, $normalizedNumber);
 
-        echo "<h2>Звонок ID: $callId</h2>";
+        echo "<h3>Звонок ID: $callId</h3>";
         echo $analysis;
-        echo "<details><summary>Полный лог (развернуть)</summary><pre>$fullLog</pre></details><hr>";
+        echo '<details><summary>Полный лог звонка (развернуть)</summary>';
+        echo '<pre style="max-height: 400px; overflow: auto;">' . htmlspecialchars($fullLog) . '</pre>';
+        echo '</details><hr>';
     }
 }
 

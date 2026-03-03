@@ -40,14 +40,14 @@ function analyzeCall($lines, $originalNumber, $callId, $normalizedNumber) {
             $startTime = $timeMatch[1];
         }
 
-        // Время конца (последняя подходящая)
+        // Время конца
         if (strpos($line, 'Hangup') !== false || strpos($line, 'exited non-zero') !== false || strpos($line, 'End MixMonitor') !== false || (strpos($line, 'bridge_channel.c: Channel') !== false && strpos($line, 'left') !== false)) {
             if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]/', $line, $timeMatch)) {
                 $endTime = $timeMatch[1];
             }
         }
 
-        // Тип по __DIRECTION
+        // Тип звонка
         if (strpos($line, '__DIRECTION=INBOUND') !== false) {
             $sawInbound = true;
             $type = 'Входящий';
@@ -76,7 +76,7 @@ function analyzeCall($lines, $originalNumber, $callId, $normalizedNumber) {
             if (preg_match("/Caller ID name is '(\d+)'/", $line, $match)) $from = $match[1];
         }
 
-        // На транк (incoming trunk)
+        // На транк (incoming)
         if ($type === 'Входящий' && (strpos($line, '@from-pstn:1') !== false || strpos($line, '@from-trunk:1') !== false)) {
             if (preg_match('/@(\d+)@/', $line, $trunkMatch)) $trunk = $trunkMatch[1];
         }
@@ -217,9 +217,11 @@ function analyzeCall($lines, $originalNumber, $callId, $normalizedNumber) {
             if (preg_match('/_ROUTENAME=(.+?)"/', $line, $match)) $route = $match[1];
         }
 
-        // Исходящий транк
+        // === ИСПРАВЛЕННЫЙ БЛОК: Исходящий транк (поддержка любых имён транков) ===
         if (strpos($line, 'Called PJSIP/') !== false && strpos($line, '@') !== false) {
-            if (preg_match('/Called PJSIP\/.+@(\d{6,})/', $line, $match)) $outgoingTrunk = $match[1];
+            if (preg_match('/Called PJSIP\/[^@]+@([^\s,)\]]+)/', $line, $match)) {
+                $outgoingTrunk = $match[1];
+            }
         }
 
         // Кто ответил / время ответа
@@ -255,7 +257,7 @@ function analyzeCall($lines, $originalNumber, $callId, $normalizedNumber) {
         }
     }
 
-    // Сборка summary
+    // === СБОРКА SUMMARY ===
     $summary .= "<li>Тип: $type</li>";
     if ($from) $summary .= "<li>От: $from</li>";
     if ($to) $summary .= "<li>К: $to</li>";
@@ -276,7 +278,10 @@ function analyzeCall($lines, $originalNumber, $callId, $normalizedNumber) {
     }
     if (!empty($queueExtensions)) $summary .= "<li>Набраны номера очереди: " . implode(', ', array_keys($queueExtensions)) . "</li>";
     if ($forward) $summary .= "<li>Переадресация звонка: $forward</li>";
+
+    if ($route) $summary .= "<li>Исходящий маршрут: $route</li>";
     $summary .= "<li>Исходящий транк: " . ($outgoingTrunk ?: 'не использовался') . "</li>";
+
     if ($answerTime) $summary .= "<li>Время ответа на звонок: " . ($answerTime ?: 'неизвестно') . "</li>";
     $summary .= "<li>Начало: " . ($startTime ?: 'неизвестно') . "</li>";
     $summary .= "<li>Конец: " . ($endTime ?: 'неизвестно') . "</li>";
