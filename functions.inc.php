@@ -217,10 +217,13 @@ function analyzeCall($lines, $originalNumber, $callId, $normalizedNumber) {
             if (preg_match('/_ROUTENAME=(.+?)"/', $line, $match)) $route = $match[1];
         }
 
-        // === ИСПРАВЛЕННЫЙ БЛОК: Исходящий транк (поддержка любых имён транков) ===
+        // === Исходящий транк (поддержка любых имён транков) ===
         if (strpos($line, 'Called PJSIP/') !== false && strpos($line, '@') !== false) {
-            if (preg_match('/Called PJSIP\/[^@]+@([^\s,)\]]+)/', $line, $match)) {
-                $outgoingTrunk = $match[1];
+            // Пропускаем внутренние вызовы на SIP-устройства
+            if (!preg_match('/Called PJSIP\/\d{2,5}\/sip:\d+@[\d.]+/', $line)) {
+                if (preg_match('/Called PJSIP\/[^@]+@([^\s,)\]]+)/', $line, $match)) {
+                    $outgoingTrunk = $match[1];
+                }
             }
         }
 
@@ -241,7 +244,6 @@ function analyzeCall($lines, $originalNumber, $callId, $normalizedNumber) {
         }
     }
 
-    // Push last group/queue
     if ($currentGroup && $currentGroup['status']) $ringGroups[] = $currentGroup;
     if ($currentQueue && $currentQueue['status']) $queueGroups[] = $currentQueue;
 
