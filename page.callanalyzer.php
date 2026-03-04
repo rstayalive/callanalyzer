@@ -130,7 +130,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo "<h3>Звонок ID: $callId</h3>";
         echo $analysis;
         echo '<details><summary>Полный лог звонка (развернуть)</summary>';
-        echo '<pre style="max-height: 400px; overflow: auto;">' . htmlspecialchars($fullLog) . '</pre>';
+        echo '<pre style="max-height: 70vh; overflow: auto; background:#f8f9fa; padding:15px; font-size:0.86em; line-height:1.4; border:1px solid #ddd; border-radius:4px;">' 
+     . htmlspecialchars($fullLog) 
+     . '</pre>';
         echo '</details><hr>';
     }
 }
