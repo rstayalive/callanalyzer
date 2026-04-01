@@ -123,12 +123,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo "<h3>Звонок ID: $callId</h3>";
         echo $analysis;
 
+        // === КНОПКА СКАЧИВАНИЯ ===
+        echo '<div style="margin:15px 0 10px 0;">';
+        echo '<button onclick="downloadCallLog(\'' . htmlspecialchars($callId) . '\', this)" class="btn btn-success">';
+        echo '📥 Скачать полный лог звонка';
+        echo '</button>';
+        echo '</div>';
+
         echo '<details><summary>Полный лог звонка (развернуть)</summary>';
-        echo '<pre style="max-height: 70vh; overflow: auto; background:#f8f9fa; padding:15px; font-size:0.86em; line-height:1.4; border:1px solid #ddd; border-radius:4px;">' 
+        echo '<pre id="log-' . htmlspecialchars($callId) . '" style="max-height: 70vh; overflow: auto; background:#f8f9fa; padding:15px; font-size:0.86em; line-height:1.4; border:1px solid #ddd; border-radius:4px;">' 
              . htmlspecialchars($fullLog) 
              . '</pre>';
         echo '</details><hr>';
     }
+
+    // JavaScript для скачивания
+    echo '<script>
+    function downloadCallLog(callId, button) {
+        const pre = document.getElementById("log-" + callId);
+        if (!pre) return;
+        
+        const logText = pre.textContent;
+        const blob = new Blob([logText], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "call-log-" + callId + ".txt";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        // небольшая анимация кнопки
+        const originalText = button.innerHTML;
+        button.innerHTML = "✅ Скачано!";
+        setTimeout(() => { button.innerHTML = originalText; }, 1500);
+    }
+    </script>';
 }
 
 echo '</div>';
