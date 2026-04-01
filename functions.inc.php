@@ -1,5 +1,7 @@
 <?php
-function analyzeCall($lines, $originalNumber, $callId, $normalizedNumber) {
+
+function analyzeCall($lines, $originalNumber, $callId, $normalizedNumber)
+{
     $summary = '<ul>';
     $type = 'Неопределён';
     $from = '';
@@ -8,10 +10,10 @@ function analyzeCall($lines, $originalNumber, $callId, $normalizedNumber) {
     $did = '';
     $route = '';
     $ivrInput = '';
-    $ringGroups = [];
-    $queueGroups = [];
-    $extensionsRung = [];
-    $queueExtensions = [];
+    $ringGroups = array();
+    $queueGroups = array();
+    $extensionsRung = array();
+    $queueExtensions = array();
     $answeredBy = '';
     $startTime = '';
     $answerTime = '';
@@ -35,13 +37,15 @@ function analyzeCall($lines, $originalNumber, $callId, $normalizedNumber) {
     $inQueueContext = false;
 
     foreach ($lines as $line) {
-        // Время начала (первая строка)
+        // Время начала
         if (!$startTime && preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]/', $line, $timeMatch)) {
             $startTime = $timeMatch[1];
         }
 
-        // Время конца
-        if (strpos($line, 'Hangup') !== false || strpos($line, 'exited non-zero') !== false || strpos($line, 'End MixMonitor') !== false || (strpos($line, 'bridge_channel.c: Channel') !== false && strpos($line, 'left') !== false)) {
+        // Время окончания
+        if ((strpos($line, 'Hangup') !== false || strpos($line, 'exited non-zero') !== false ||
+             strpos($line, 'End MixMonitor') !== false ||
+             (strpos($line, 'bridge_channel.c: Channel') !== false && strpos($line, 'left') !== false))) {
             if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]/', $line, $timeMatch)) {
                 $endTime = $timeMatch[1];
             }
@@ -55,135 +59,124 @@ function analyzeCall($lines, $originalNumber, $callId, $normalizedNumber) {
             $type = 'Исходящий';
         }
 
-        // Дополнительно для исходящего
+        // Исходящий (дополнительная логика)
         if (!$sawInbound && strpos($line, '@from-internal:1') !== false && strlen($normalizedNumber) > 6) {
             $type = 'Исходящий';
-            if (preg_match('/PJSIP\/(\d+)-/', $line, $fromMatch) && strlen($fromMatch[1]) < 5) $from = $fromMatch[1];
-            if (preg_match('/\[(\d+)@from-internal:1\]/', $line, $toMatch)) $to = $toMatch[1];
-        }
-
-        // Внутренний
-        elseif (!$sawInbound && strpos($line, '@from-internal') !== false && strpos($line, 'OUTNUM=') === false && strlen($normalizedNumber) <= 8) {
+            if (preg_match('/PJSIP\/(\d+)-/', $line, $m) && strlen($m[1]) < 5) $from = $m[1];
+            if (preg_match('/\[(\d+)@from-internal:1\]/', $line, $m)) $to = $m[1];
+        } elseif (!$sawInbound && strpos($line, '@from-internal') !== false && strpos($line, 'OUTNUM=') === false && strlen($normalizedNumber) <= 8) {
             $type = 'Внутренний';
-            if (preg_match('/PJSIP\/(\d+)-/', $line, $fromMatch)) $from = $fromMatch[1];
+            if (preg_match('/PJSIP\/(\d+)-/', $line, $m)) $from = $m[1];
             $to = $normalizedNumber;
         }
 
-        // От (caller)
+        // От кого (Caller)
         if (strpos($line, 'FROMEXTEN=') !== false && !$from) {
-            if (preg_match('/FROMEXTEN=(\d+)/', $line, $match)) $from = $match[1];
+            if (preg_match('/FROMEXTEN=(\d+)/', $line, $m)) $from = $m[1];
         } elseif (strpos($line, 'Caller ID name') !== false && !$from) {
-            if (preg_match("/Caller ID name is '(\d+)'/", $line, $match)) $from = $match[1];
+            if (preg_match("/Caller ID name is '(\d+)'/", $line, $m)) $from = $m[1];
         }
 
-        // На транк (incoming)
+        // Транк (входящий)
         if ($type === 'Входящий' && (strpos($line, '@from-pstn:1') !== false || strpos($line, '@from-trunk:1') !== false)) {
-            if (preg_match('/@(\d+)@/', $line, $trunkMatch)) $trunk = $trunkMatch[1];
+            if (preg_match('/@(\d+)@/', $line, $m)) $trunk = $m[1];
         }
 
         // DID
         if (strpos($line, '__FROM_DID=') !== false) {
-            if (preg_match('/__FROM_DID=(\d+)/', $line, $match)) $did = $match[1];
+            if (preg_match('/__FROM_DID=(\d+)/', $line, $m)) $did = $m[1];
         }
 
-        // IVR input
+        // IVR ввод
         if (strpos($line, 'User entered') !== false) {
-            if (preg_match("/User entered '(\d+)'/", $line, $match)) $ivrInput = $match[1];
+            if (preg_match("/User entered '(\d+)'/", $line, $m)) $ivrInput = $m[1];
         }
 
         // Custom ivrp context
-        if (strpos($line, '@ivrp') !== false) {
-            $inCustomContext = true;
-        }
+        if (strpos($line, '@ivrp') !== false) $inCustomContext = true;
 
-        // Responsible dial in custom
+        // Поиск ответственного в custom-контексте
         if ($inCustomContext && strpos($line, 'Dial') !== false && strpos($line, 'PJSIP/') !== false && strpos($line, '@') === false) {
-            if (preg_match('/PJSIP\/(\d+),/', $line, $match)) $responsibleExtension = $match[1];
+            if (preg_match('/PJSIP\/(\d+),/', $line, $m)) $responsibleExtension = $m[1];
         }
 
-        // Responsible status
-        if ($inCustomContext && strpos($line, 'Nobody picked up') !== false && $responsibleExtension) {
-            $responsibleStatus = 'не ответил';
-        } elseif ($inCustomContext && strpos($line, 'answered') !== false && $responsibleExtension) {
-            $responsibleStatus = 'ответил';
+        if ($inCustomContext && $responsibleExtension) {
+            if (strpos($line, 'Nobody picked up') !== false) $responsibleStatus = 'не ответил';
+            elseif (strpos($line, 'answered') !== false) $responsibleStatus = 'ответил';
         }
 
-        // Transition Goto after no answer
+        // Переход после неудачного поиска
         if ($inCustomContext && $responsibleStatus === 'не ответил' && strpos($line, 'Goto') !== false) {
-            if (preg_match('/Goto\(".*", "(\w+-\w+| \w+),(\d+|\w+),/', $line, $match)) {
-                $context = $match[1];
-                $tType = '';
-                if ($context === 'ext-group') $tType = 'ring group';
-                elseif ($context === 'ext-queues') $tType = 'queue';
-                elseif (strpos($context, 'ivr-') === 0) $tType = 'ivr';
-                elseif ($context === 'from-internal') $tType = 'extension';
+            if (preg_match('/Goto\(".*", "(\w+-\w+|\w+),(\d+|\w+),/', $line, $m)) {
+                $context = $m[1];
+                if ($context == 'ext-group') {
+                    $tType = 'ring group';
+                } elseif ($context == 'ext-queues') {
+                    $tType = 'queue';
+                } elseif (strpos($context, 'ivr-') === 0) {
+                    $tType = 'ivr';
+                } elseif ($context === 'from-internal') {
+                    $tType = 'extension';
+                } else {
+                    $tType = $context;
+                }
                 $transitionType = $tType;
-                $transitionDestination = $match[2];
+                $transitionDestination = $m[2];
                 $inCustomContext = false;
             }
         }
 
-        // Ring group start
+        // === Ring Groups ===
         if (strpos($line, 'ext-group,') !== false) {
-            if ($currentGroup && $currentGroup['status']) {
-                $ringGroups[] = $currentGroup;
-            }
-            if (preg_match('/ext-group,(\d+|\w+),/', $line, $match)) {
-                $currentGroup = ['group' => $match[1], 'status' => '', 'answeredBy' => '', 'strategy' => 'неизвестно'];
+            if (is_array($currentGroup) && $currentGroup['status']) $ringGroups[] = $currentGroup;
+            if (preg_match('/ext-group,(\d+|\w+),/', $line, $m)) {
+                $currentGroup = array('group' => $m[1], 'status' => '', 'answeredBy' => '', 'strategy' => 'неизвестно');
             }
             $inQueueContext = false;
         }
 
-        // Ring strategy
-        if (strpos($line, 'RingGroupMethod=') !== false && $currentGroup) {
-            if (preg_match('/RingGroupMethod=(\w+)/', $line, $match)) $currentGroup['strategy'] = $match[1];
+        if (is_array($currentGroup) && strpos($line, 'RingGroupMethod=') !== false) {
+            if (preg_match('/RingGroupMethod=(\w+)/', $line, $m)) $currentGroup['strategy'] = $m[1];
         }
 
-        // Extensions in ring group
         if (!$inQueueContext && strpos($line, 'Added extension') !== false) {
-            if (preg_match('/Added extension (\d+)/', $line, $match)) $extensionsRung[$match[1]] = true;
+            if (preg_match('/Added extension (\d+)/', $line, $m)) $extensionsRung[$m[1]] = true;
         } elseif (!$inQueueContext && strpos($line, 'Built External dialstring component for') !== false) {
-            if (preg_match('/for (\d+):/', $line, $match)) $extensionsRung[$match[1]] = true;
+            if (preg_match('/for (\d+):/', $line, $m)) $extensionsRung[$m[1]] = true;
         }
 
-        // Answered in group
-        if (strpos($line, 'answered') !== false && $currentGroup) {
-            if (preg_match('/PJSIP\/(\d+)-\w+ answered/', $line, $match)) {
-                $currentGroup['answeredBy'] = $match[1];
-                $currentGroup['status'] = "ответил {$match[1]}";
+        if (strpos($line, 'answered') !== false && is_array($currentGroup)) {
+            if (preg_match('/PJSIP\/(\d+)-\w+ answered/', $line, $m)) {
+                $currentGroup['answeredBy'] = $m[1];
+                $currentGroup['status'] = "ответил {$m[1]}";
                 $ringGroups[] = $currentGroup;
                 $currentGroup = null;
             }
         }
 
-        // No answer in group
-        if (strpos($line, 'Nobody picked up') !== false && $currentGroup) {
+        if (strpos($line, 'Nobody picked up') !== false && is_array($currentGroup)) {
             $currentGroup['status'] = 'никто не ответил';
             $ringGroups[] = $currentGroup;
             $currentGroup = null;
         }
 
-        // Queue start
+        // === Queues ===
         if (strpos($line, 'Executing') !== false && strpos($line, 'Queue(') !== false) {
-            if (preg_match('/Queue\(".*", "(\d+),/', $line, $match)) {
-                if ($currentQueue && $currentQueue['status']) {
-                    $queueGroups[] = $currentQueue;
-                }
-                $currentQueue = ['queue' => $match[1], 'status' => '', 'answeredBy' => ''];
+            if (preg_match('/Queue\(".*", "(\d+),/', $line, $m)) {
+                if (is_array($currentQueue) && $currentQueue['status']) $queueGroups[] = $currentQueue;
+                $currentQueue = array('queue' => $m[1], 'status' => '', 'answeredBy' => '');
                 $inQueueContext = true;
             }
         }
 
-        // Extensions in queue
         if ($inQueueContext && strpos($line, 'Called PJSIP/') !== false && strpos($line, '@') === false) {
-            if (preg_match('/Called PJSIP\/(\d+)/', $line, $match)) $queueExtensions[$match[1]] = true;
+            if (preg_match('/Called PJSIP\/(\d+)/', $line, $m)) $queueExtensions[$m[1]] = true;
         }
 
-        // Answered in queue
         if ($inQueueContext && strpos($line, 'answered') !== false) {
-            if (preg_match('/PJSIP\/(\d+)-\w+ answered/', $line, $match)) {
-                $currentQueue['answeredBy'] = $match[1];
-                $currentQueue['status'] = "ответил {$match[1]}";
+            if (preg_match('/PJSIP\/(\d+)-\w+ answered/', $line, $m)) {
+                $currentQueue['answeredBy'] = $m[1];
+                $currentQueue['status'] = "ответил {$m[1]}";
                 $queueGroups[] = $currentQueue;
                 $currentQueue = null;
                 $inQueueContext = false;
@@ -192,106 +185,123 @@ function analyzeCall($lines, $originalNumber, $callId, $normalizedNumber) {
 
         // Transfer
         if (strpos($line, '@from-internal-xfer') !== false) {
-            if (preg_match('/\[(\d+)@from-internal-xfer:1\]/', $line, $match)) {
-                $prevAnswered = !empty($ringGroups) ? end($ringGroups)['answeredBy'] : (!empty($queueGroups) ? end($queueGroups)['answeredBy'] : $answeredBy);
-                $transfer = "с $prevAnswered на {$match[1]}";
+            if (preg_match('/\[(\d+)@from-internal-xfer:1\]/', $line, $m)) {
+                $prev = '';
+                if (!empty($ringGroups)) {
+                    $last = end($ringGroups);
+                    $prev = $last['answeredBy'];
+                } elseif (!empty($queueGroups)) {
+                    $last = end($queueGroups);
+                    $prev = $last['answeredBy'];
+                } else {
+                    $prev = $answeredBy;
+                }
+                $transfer = $prev ? "с $prev на {$m[1]}" : "на {$m[1]}";
             }
         }
 
         // Forward (follow-me)
         if (strpos($line, 'followme-sub') !== false) {
-            if (preg_match('/followme-sub,(\d+),/', $line, $match)) {
-                $exten = $match[1];
-                $forwardedTo = '';
-                foreach ($lines as $l) {
-                    if (strpos($l, 'Added extension') !== false && strpos($l, '#') !== false) {
-                        if (preg_match('/Added extension (\d+#)/', $l, $m)) $forwardedTo = str_replace('#', '', $m[1]);
-                    }
-                }
-                $forward = "follow me $exten на $forwardedTo";
+            if (preg_match('/followme-sub,(\d+),/', $line, $m)) {
+                $forward = "follow me {$m[1]}";
             }
         }
 
         // Outbound route
         if (strpos($line, '_ROUTENAME=') !== false) {
-            if (preg_match('/_ROUTENAME=(.+?)"/', $line, $match)) $route = $match[1];
+            if (preg_match('/_ROUTENAME=(.+?)"/', $line, $m)) $route = $m[1];
         }
 
-        // === Исходящий транк (поддержка любых имён транков) ===
+        // Исходящий транк
         if (strpos($line, 'Called PJSIP/') !== false && strpos($line, '@') !== false) {
-            // Пропускаем внутренние вызовы на SIP-устройства
             if (!preg_match('/Called PJSIP\/\d{2,5}\/sip:\d+@[\d.]+/', $line)) {
-                if (preg_match('/Called PJSIP\/[^@]+@([^\s,)\]]+)/', $line, $match)) {
-                    $outgoingTrunk = $match[1];
+                if (preg_match('/Called PJSIP\/[^@]+@([^\s,)\]]+)/', $line, $m)) {
+                    $outgoingTrunk = $m[1];
                 }
             }
         }
 
-        // Кто ответил / время ответа
+        // Ответил + время ответа
         if (strpos($line, 'answered') !== false) {
-            if (preg_match('/PJSIP\/(\d+)-\w+ answered/', $line, $match)) $answeredBy = $match[1];
+            if (preg_match('/PJSIP\/(\d+)-\w+ answered/', $line, $m)) $answeredBy = $m[1];
             if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]/', $line, $timeMatch)) $answerTime = $timeMatch[1];
         }
 
-        // Файл записи
+        // Запись разговора
         if (strpos($line, 'CDR(recordingfile)=') !== false && strpos($line, '.wav') !== false) {
-            if (preg_match('/CDR\(recordingfile\)=(.+?)"/', $line, $match)) $recordingFile = $match[1];
+            if (preg_match('/CDR\(recordingfile\)=(.+?)"/', $line, $m)) $recordingFile = $m[1];
         }
 
-        // Статус для входящего без ответа
+        // Статус «абонент положил трубку»
         if ($type === 'Входящий' && strpos($line, 'User disconnected') !== false && !$answeredBy) {
             $status = 'Абонент положил трубку';
         }
     }
 
-    if ($currentGroup && $currentGroup['status']) $ringGroups[] = $currentGroup;
-    if ($currentQueue && $currentQueue['status']) $queueGroups[] = $currentQueue;
+    // Добавить последние группы/очереди
+    if (is_array($currentGroup) && $currentGroup['status']) $ringGroups[] = $currentGroup;
+    if (is_array($currentQueue) && $currentQueue['status']) $queueGroups[] = $currentQueue;
 
     // Длительность
     if ($answerTime && $endTime) {
-        $answerDate = strtotime($answerTime);
-        $endDate = strtotime($endTime);
-        $diff = floor(($endDate - $answerDate));
-        if ($diff >= 0) {
-            $duration = "$diff секунд";
-        } else {
-            $duration = 'Не отвечен';
-        }
+        $diff = strtotime($endTime) - strtotime($answerTime);
+        $duration = ($diff >= 0) ? "$diff секунд" : 'Не отвечен';
     }
 
-    // === СБОРКА SUMMARY ===
-    $summary .= "<li>Тип: $type</li>";
-    if ($from) $summary .= "<li>От: $from</li>";
-    if ($to) $summary .= "<li>К: $to</li>";
-    if ($trunk) $summary .= "<li>На транк: $trunk</li>";
-    if ($did) $summary .= "<li>DID: $did</li>";
-    if ($ivrInput) $summary .= "<li>IVR ввод: $ivrInput</li>";
-    if ($responsibleExtension) $summary .= "<li>Поиск ответственного: $responsibleExtension ($responsibleStatus)</li>";
-    if ($transitionType) $summary .= "<li>Переход с поиска ответственного: $transitionType $transitionDestination</li>";
+    // ==================== ФОРМИРОВАНИЕ ИТОГА ====================
+    $summary .= "<li><strong>Тип:</strong> $type</li>";
+    if ($from) $summary .= "<li><strong>От:</strong> $from</li>";
+    if ($to)   $summary .= "<li><strong>К:</strong> $to</li>";
+    if ($trunk) $summary .= "<li><strong>На транк:</strong> $trunk</li>";
+    if ($did)   $summary .= "<li><strong>DID:</strong> $did</li>";
+    if ($ivrInput) $summary .= "<li><strong>IVR ввод:</strong> $ivrInput</li>";
+
+    if ($responsibleExtension) {
+        $summary .= "<li><strong>Поиск ответственного:</strong> $responsibleExtension ($responsibleStatus)</li>";
+    }
+    if ($transitionType) {
+        $summary .= "<li><strong>Переход после поиска:</strong> $transitionType $transitionDestination</li>";
+    }
+
     if (!empty($ringGroups)) {
-        $rgText = implode(' и ', array_map(function($rg) { return "{$rg['group']} ({$rg['status']})"; }, $ringGroups));
-        $summary .= "<li>Ring Group: $rgText</li>";
+        $rgParts = array();
+        foreach ($ringGroups as $g) {
+            $rgParts[] = $g['group'] . ' (' . $g['status'] . ')';
+        }
+        $rgText = implode(' и ', $rgParts);
+        $summary .= "<li><strong>Ring Group:</strong> $rgText</li>";
     }
-    if (!empty($extensionsRung)) $summary .= "<li>Звонок был передан на номера: " . implode(', ', array_keys($extensionsRung)) . "</li>";
-    if ($transfer) $summary .= "<li>Перевод звонка: $transfer</li>";
+    if (!empty($extensionsRung)) {
+        $summary .= "<li><strong>Звонок был передан на номера:</strong> " . implode(', ', array_keys($extensionsRung)) . "</li>";
+    }
+    if ($transfer) $summary .= "<li><strong>Перевод звонка:</strong> $transfer</li>";
+
     if (!empty($queueGroups)) {
-        $qgText = implode(' и ', array_map(function($qg) { return "{$qg['queue']} ({$qg['status']})"; }, $queueGroups));
-        $summary .= "<li>Звонок в queue: $qgText</li>";
+        $qgParts = array();
+        foreach ($queueGroups as $q) {
+            $qgParts[] = $q['queue'] . ' (' . $q['status'] . ')';
+        }
+        $qgText = implode(' и ', $qgParts);
+        $summary .= "<li><strong>Звонок в queue:</strong> $qgText</li>";
     }
-    if (!empty($queueExtensions)) $summary .= "<li>Набраны номера очереди: " . implode(', ', array_keys($queueExtensions)) . "</li>";
-    if ($forward) $summary .= "<li>Переадресация звонка: $forward</li>";
+    if (!empty($queueExtensions)) {
+        $summary .= "<li><strong>Набраны номера очереди:</strong> " . implode(', ', array_keys($queueExtensions)) . "</li>";
+    }
+    if ($forward) $summary .= "<li><strong>Переадресация:</strong> $forward</li>";
 
-    if ($route) $summary .= "<li>Исходящий маршрут: $route</li>";
-    $summary .= "<li>Исходящий транк: " . ($outgoingTrunk ?: 'не использовался') . "</li>";
+    if ($route) $summary .= "<li><strong>Исходящий маршрут:</strong> $route</li>";
+    $outTrunkText = $outgoingTrunk ? $outgoingTrunk : 'не использовался';
+    $summary .= "<li><strong>Исходящий транк:</strong> $outTrunkText</li>";
 
-    if ($answerTime) $summary .= "<li>Время ответа на звонок: " . ($answerTime ?: 'неизвестно') . "</li>";
-    $summary .= "<li>Начало: " . ($startTime ?: 'неизвестно') . "</li>";
-    $summary .= "<li>Конец: " . ($endTime ?: 'неизвестно') . "</li>";
-    $summary .= "<li>Длительность: $duration</li>";
-    if ($recordingFile) $summary .= "<li>Файл записи: $recordingFile</li>";
-    if ($status) $summary .= "<li>Статус: $status</li>";
+    if ($answerTime) $summary .= "<li><strong>Время ответа:</strong> $answerTime</li>";
+    $summary .= "<li><strong>Начало:</strong> " . ($startTime ? $startTime : 'неизвестно') . "</li>";
+    $summary .= "<li><strong>Конец:</strong> " . ($endTime ? $endTime : 'неизвестно') . "</li>";
+    $summary .= "<li><strong>Длительность:</strong> $duration</li>";
+
+    if ($recordingFile) $summary .= "<li><strong>Файл записи:</strong> $recordingFile</li>";
+    if ($status) $summary .= "<li><strong>Статус:</strong> $status</li>";
+
     $summary .= '</ul>';
 
     return $summary;
 }
-?>
