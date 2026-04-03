@@ -13,4 +13,4 @@ chown asterisk:asterisk /var/www/html/admin/modules/callanalyzer
 fwconsole ma install callanalyzer
 
 fwconsole reload 
-<img width="1946" height="793" alt="Screenshot 2026-02-17 110422" src="https://github.com/user-attachments/assets/c1c557bb-552e-49ee-bfe8-ffe4501cbf8f" />
+![Y7MspnvaxW](https://github.com/user-attachments/assets/18d82d49-d6b9-4649-a769-2c91f9136e25)
