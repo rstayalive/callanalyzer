@@ -123,21 +123,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo "<h3>Звонок ID: $callId</h3>";
         echo $analysis;
 
-        // === КНОПКА СКАЧИВАНИЯ ===
         echo '<div style="margin:15px 0 10px 0;">';
         echo '<button onclick="downloadCallLog(\'' . htmlspecialchars($callId) . '\', this)" class="btn btn-success">';
         echo '📥 Скачать полный лог звонка';
         echo '</button>';
         echo '</div>';
 
-        echo '<details><summary>Полный лог звонка (развернуть)</summary>';
-        echo '<pre id="log-' . htmlspecialchars($callId) . '" style="max-height: 70vh; overflow: auto; background:#f8f9fa; padding:15px; font-size:0.86em; line-height:1.4; border:1px solid #ddd; border-radius:4px;">' 
+        echo '<details style="margin-top: 10px;">';
+        echo '<summary style="cursor: pointer; font-weight: bold; padding: 8px 0; font-size: 1.05em;">';
+        echo 'Полный лог звонка (развернуть)';
+        echo '</summary>';
+        echo '<pre id="log-' . htmlspecialchars($callId) . '" style="max-height: 70vh; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 0.85em; line-height: 1.35; background: #f8f9fa; padding: 12px; border: 1px solid #ddd; border-radius: 4px; margin-top: 8px;">' 
              . htmlspecialchars($fullLog) 
              . '</pre>';
         echo '</details><hr>';
     }
 
-    // JavaScript для скачивания
+    // JavaScript для скачивания лога
     echo '<script>
     function downloadCallLog(callId, button) {
         const pre = document.getElementById("log-" + callId);
@@ -155,7 +157,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
-        // небольшая анимация кнопки
         const originalText = button.innerHTML;
         button.innerHTML = "✅ Скачано!";
         setTimeout(() => { button.innerHTML = originalText; }, 1500);

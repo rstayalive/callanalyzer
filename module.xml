@@ -3,7 +3,7 @@
     <rawname>callanalyzer</rawname>
     <name>Call Analyzer</name>
     <namespace>Callanalyzer</namespace>
-    <version>10.0.11</version>
+    <version>11.0.1</version>
     <type>tool</type>
     <license>GPLv3+</license>
     <category>Reports</category>
