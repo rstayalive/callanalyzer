@@ -8,9 +8,10 @@ Simple setup: Go to Admin > Module Admin > Upload Modules to install the module.
 
 Or upload files to /var/www/html/admin/modules/callanalyzer
 
-chown asterisk:asterisk /var/www/html/admin/modules/callanalyzer
+chown -R asterisk:asterisk /var/www/html/admin/modules/callanalyzer
 
 fwconsole ma install callanalyzer
+fwconsole ma enable callanalyzer
 
 fwconsole reload 
 ![Y7MspnvaxW](https://github.com/user-attachments/assets/18d82d49-d6b9-4649-a769-2c91f9136e25)
