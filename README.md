@@ -11,6 +11,7 @@ Or upload files to /var/www/html/admin/modules/callanalyzer
 chown -R asterisk:asterisk /var/www/html/admin/modules/callanalyzer
 
 fwconsole ma install callanalyzer
+
 fwconsole ma enable callanalyzer
 
 fwconsole reload 
