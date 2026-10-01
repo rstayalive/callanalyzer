@@ -3,7 +3,7 @@
     <rawname>callanalyzer</rawname>
     <name>Call Analyzer</name>
     <namespace>Callanalyzer</namespace>
-    <version>11.0.1</version>
+    <version>11.0.3</version>
     <type>tool</type>
     <license>GPLv3+</license>
     <category>Reports</category>
@@ -13,6 +13,7 @@
         <callanalyzer requires_auth="true">Call Analyzer</callanalyzer>
     </menuitems>
     <supported>
+        <version>16.0</version>
         <version>17.0</version>
     </supported>
 </module>

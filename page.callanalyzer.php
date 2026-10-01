@@ -34,17 +34,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $logDir = '/var/log/asterisk/';
-    $possibleLogs = array($logDir . 'full');
+    $possibleLogs = array();
 
-    foreach (array('.0', '.1', '.2') as $suffix) {
-        $f = $logDir . 'full' . $suffix;
-        if (file_exists($f)) $possibleLogs[] = $f;
+    // Текущий лог и его сегменты
+    foreach (array('full', 'full.0', 'full.1', 'full.2') as $name) {
+        if (file_exists($logDir . $name)) {
+            $possibleLogs[] = $logDir . $name;
+        }
     }
 
-    $yyyymmdd = str_replace('-', '', $date);
-    $rotatedLog = $logDir . 'full-' . $yyyymmdd;
-    if (file_exists($rotatedLog)) {
-        $possibleLogs[] = $rotatedLog;
+    // Ротация: имя файла = дата ротации (~03:00), внутри — записи с ~03:00
+    // прошлых суток до ~03:00 даты в имени. Логи за искомую дату лежат сразу
+    // в двух файлах: full-<дата> (00:00-03:00) и full-<дата+1> (03:00-24:00),
+    // поэтому читаем ВСЕ ротации, а отбор по дате делается ниже по каждой
+    // строке ($datePrefix).
+    $rotatedLogs = glob($logDir . 'full-*');
+    if (is_array($rotatedLogs)) {
+        foreach ($rotatedLogs as $f) {
+            if (preg_match('/^full-\d{8}$/', basename($f))) {
+                $possibleLogs[] = $f;
+            }
+        }
     }
 
     $datePrefix = '[' . $date;
